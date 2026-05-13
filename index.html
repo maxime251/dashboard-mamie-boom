@@ -274,7 +274,11 @@ function switchTab(name) {
 /* ═══════════════════════════
    AIRTABLE
 ═══════════════════════════ */
-const TOKEN = 'patcF6TOmVZwqLLay.a3cf586e204e4e6d5bc3a21d12f21491805a7a178e3235516cc4794a390451f5';
+const TOKEN = localStorage.getItem('mb_at_token') || '';
+if (!TOKEN) {
+  const t = prompt('Entrez votre token Airtable :');
+  if (t) { localStorage.setItem('mb_at_token', t.trim()); location.reload(); }
+}
 const BASE_ID = 'appNCjCXe2kmAWicp';
 const TABLE_ID = 'tbllikWDe1JcBn43W';
 
@@ -551,8 +555,7 @@ async function loadBinomes() {
   monday.setHours(0,0,0,0);
 
   const visitesS = suivi.filter(function(r) {
-    if (!r['DateDebutVisite_Suivi']) return false;
-    return new Date(r['DateDebutVisite_Suivi']) >= monday && new Date(r['DateDebutVisite_Suivi']) <= now;
+    return !!r['DateDebutVisite_Suivi'];
   });
 
   const totalMin = visitesS.reduce(function(s, r) { return s + parseMin(r['DureeVisite_Suivi']); }, 0);
