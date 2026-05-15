@@ -544,13 +544,15 @@ function initTokenForm() {
   }
 }
 
-async function fetchBubbleAll(type, filters) {
+async function fetchBubbleAll(type, params) {
   if (!BUBBLE_TOKEN) return [];
   let results = [], cursor = 0, remaining = 1;
   while (remaining > 0) {
     try {
       let url = BUBBLE_BASE + type + '?limit=100&cursor=' + cursor;
-      if (filters) url += '&filters=' + encodeURIComponent(JSON.stringify(filters));
+      if (params && params.sort) url += '&sort_field=' + params.sort + '&descending=true';
+      if (params && params.filters) url += '&filters=' + encodeURIComponent(JSON.stringify(params.filters));
+      if (params && params.maxPages && cursor >= params.maxPages * 100) break;
       const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + BUBBLE_TOKEN } });
       if (!res.ok) break;
       const json = await res.json();
@@ -583,23 +585,40 @@ async function loadBinomes() {
   const mondayISO = monday.toISOString().split('T')[0];
 
   // Appels API Bubble en parallèle
-  const [suivi, binomes, ga] = await Promise.all([
-    fetchBubbleAll('BA_Suivi', [{"key":"DateDebutVisite_Suivi","constraint_type":"greater than","value": mondayISO}]),
-    fetchBubbleAll('Binome_moisSuivi', [{"key":"ValidationMB","constraint_type":"equals","value":"true"}]),
-    fetchBubbleAll('BA_GentilAccompagnateur')
+  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  
+  const [suiviRaw, binomesRaw, ga] = await Promise.all([
+    fetchBubbleAll('BA_Suivi', { sort: 'DateDebutVisite_Suivi', maxPages: 3 }),
+    fetchBubbleAll('Binome_moisSuivi', { sort: 'DATE_DATE', maxPages: 2 }),
+    fetchBubbleAll('BA_GentilAccompagnateur', { sort: 'Created Date', maxPages: 2 })
   ]);
 
   bStatus.style.display = 'none';
 
-  const visitesS = suivi; // deja filtres par API Bubble sur la semaine en cours
+  // Filtrage JS - visites de la semaine en cours
+  const visitesS = suiviRaw.filter(function(r) {
+    if (!r['DateDebutVisite_Suivi']) return false;
+    const d = new Date(r['DateDebutVisite_Suivi']);
+    return d >= monday && d <= now;
+  });
 
-  const totalMin = visitesS.reduce(function(s, r) { return s + parseMin(r['Duree_Suivi'] || r['DureeVisite_Suivi']); }, 0);
+  // Filtrage JS - binomes actifs du mois en cours
+  const binomes = binomesRaw.filter(function(r) {
+    if (!r['ValidationMB']) return false;
+    if (!r['DATE_DATE']) return false;
+    const d = new Date(r['DATE_DATE']);
+    return d >= firstOfMonth && d <= now;
+  });
+
+  const suivi = suiviRaw;
+
+  const totalMin = visitesS.reduce(function(s, r) { return s + parseMin(r['Duree_Suivi']); }, 0);
   const hReal = Math.round(totalMin / 60 * 10) / 10;
   const hTheo = binomes.length * 3;
   const pct = hTheo > 0 ? Math.round(hReal / hTheo * 100) : 0;
 
   const hMai = visitesS.reduce(function(s, r) {
-    return s + parseMin(r['Duree_Suivi'] || r['DureeVisite_Suivi']);
+    return s + parseMin(r['Duree_Suivi']);
   }, 0) / 60;
 
   const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -642,7 +661,7 @@ async function loadBinomes() {
   visitesS.forEach(function(r) {
     if (!r['DateDebutVisite_Suivi']) return;
     const idx = (new Date(r['DateDebutVisite_Suivi']).getDay() + 6) % 7;
-    dayH[idx] += parseMin(r['Duree_Suivi'] || r['DureeVisite_Suivi']) / 60;
+    dayH[idx] += parseMin(r['Duree_Suivi']) / 60;
   });
 
   if (bChartJour) bChartJour.destroy();
@@ -660,7 +679,7 @@ async function loadBinomes() {
   });
 
   const topMap = {};
-  visitesS.forEach(function(r) { const k = r['x_AirtableSB_Suivi'] || r['x_AirtableSB'] || 'Inconnu'; topMap[k] = (topMap[k] || 0) + parseMin(r['Duree_Suivi'] || r['DureeVisite_Suivi']); });
+  visitesS.forEach(function(r) { const k = r['x_AirtableSB_Suivi'] || 'Inconnu'; topMap[k] = (topMap[k] || 0) + parseMin(r['Duree_Suivi']); });
   const tops = Object.entries(topMap).sort(function(a,b) { return b[1]-a[1]; }).slice(0,8);
   const maxM = tops[0] ? tops[0][1] : 1;
   const tbl = document.getElementById('b-top');
