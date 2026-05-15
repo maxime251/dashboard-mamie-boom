@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard KPI — Mamie Boom</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f3; color: #1a1a1a; }
+
+  /* ── TOP BAR ── */
+  .topbar { background: white; border-bottom: 0.5px solid #e0e0e0; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 52px; position: sticky; top: 0; z-index: 10; }
+  .topbar-title { font-size: 15px; font-weight: 500; }
+  .topbar-sub { font-size: 12px; color: #999; margin-top: 1px; }
+
+  /* ── TABS ── */
+  .tabs { display: flex; gap: 0; padding: 0 24px; background: white; border-bottom: 0.5px solid #e0e0e0; }
+  .tab { font-size: 13px; padding: 12px 18px; cursor: pointer; border-bottom: 2px solid transparent; color: #666; transition: color .15s; user-select: none; display: flex; align-items: center; gap: 6px; }
+  .tab:hover { color: #1a1a1a; }
+  .tab.active { color: #1a1a1a; border-bottom-color: #1a1a1a; font-weight: 500; }
+  .tab-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── CONTENT ── */
+  .tab-content { display: none; padding: 24px; }
+  .tab-content.active { display: block; }
+
+  /* ── SHARED ── */
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+  .page-header-left h2 { font-size: 17px; font-weight: 500; margin-bottom: 3px; }
+  .page-header-left .sub { font-size: 13px; color: #666; }
+  .nav { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button { background: white; border: 0.5px solid #ddd; border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer; font-family: inherit; }
+  button:hover { background: #f0f0ee; }
+
+  /* ── STATUS ── */
+  .status-bar { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
+  .status-info { background: #E6F1FB; color: #185FA5; }
+  .status-error { background: #FCEBEB; color: #A32D2D; }
+  .status-ok { background: #EAF3DE; color: #3B6D11; }
+
+  /* ── KPI GRIDS ── */
+  .kpi-grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
+  .kpi-grid-6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 20px; }
+  .kpi-card { background: #f0efea; border-radius: 8px; padding: 16px; }
+  .kpi-card-amber { background: #FAEEDA; border-radius: 8px; padding: 16px; }
+  .kpi-label { font-size: 12px; color: #666; margin-bottom: 6px; }
+  .kpi-label-amber { font-size: 12px; color: #633806; margin-bottom: 6px; }
+  .kpi-value { font-size: 28px; font-weight: 500; line-height: 1.1; }
+  .kpi-value-amber { font-size: 28px; font-weight: 500; line-height: 1.1; color: #633806; }
+  .kpi-total { font-size: 11px; color: #999; margin-top: 4px; }
+  .kpi-total-amber { font-size: 11px; color: #854F0B; margin-top: 4px; }
+  .kpi-sub-row { display: flex; gap: 16px; margin-top: 8px; padding-top: 8px; border-top: 0.5px solid #ddd; }
+  .kpi-sub-item { font-size: 12px; color: #666; display: flex; align-items: center; gap: 5px; }
+  .kpi-sub-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .kpi-sub-val { font-weight: 500; color: #1a1a1a; }
+  .kpi-tag { display: inline-block; font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 20px; margin-top: 6px; }
+  .tag-green { background: #E1F5EE; color: #085041; }
+  .tag-blue { background: #E6F1FB; color: #0C447C; }
+  .tag-amber { background: #FAEEDA; color: #633806; }
+  .tag-red { background: #FCEBEB; color: #791F1F; }
+  .tag-gray { background: #F1EFE8; color: #444441; }
+
+  /* ── CARDS ── */
+  .card { background: white; border: 0.5px solid #e0e0e0; border-radius: 12px; padding: 16px 20px; margin-bottom: 16px; }
+  .card-title { font-size: 13px; font-weight: 500; color: #444; margin-bottom: 4px; }
+  .card-sub { font-size: 11px; color: #aaa; margin-bottom: 12px; }
+  .card-toggle { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+  .toggle-icon { font-size: 18px; color: #999; transition: transform 0.2s; }
+  .toggle-icon.open { transform: rotate(180deg); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+
+  /* ── LEGEND ── */
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: #666; margin-top: 10px; }
+  .legend span { display: flex; align-items: center; gap: 4px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+  /* ── RECORDS ── */
+  .record-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 0.5px solid #eee; font-size: 13px; gap: 6px; }
+  .record-name { font-weight: 500; min-width: 140px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+  .record-etape { color: #666; font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .record-date { color: #999; font-size: 12px; white-space: nowrap; }
+  .badge { font-size: 10px; padding: 2px 6px; border-radius: 20px; }
+  .badge-refuse { background: #FAECE7; color: #993C1D; }
+  .badge-client { background: #EAF3DE; color: #3B6D11; }
+  .badge-canal-ligne { background: #E1F5EE; color: #085041; }
+  .badge-canal-tel { background: #EEEDFE; color: #3C3489; }
+
+  /* ── BAR LIST ── */
+  .bar-list { width: 100%; border-collapse: collapse; }
+  .bar-list td { padding: 4px 0; vertical-align: middle; font-size: 12px; }
+  .bname { color: #1a1a1a; width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bwrap { padding: 0 8px; width: 100%; }
+  .bbar { height: 16px; border-radius: 3px; }
+  .bval { color: #666; white-space: nowrap; text-align: right; }
+
+  /* ── FOOTER NOTE ── */
+  .footer-note { font-size: 11px; color: #aaa; padding-top: 12px; border-top: 0.5px solid #eee; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px; }
+
+  @media (max-width: 700px) {
+    .kpi-grid-5 { grid-template-columns: repeat(2, 1fr); }
+    .kpi-grid-6 { grid-template-columns: repeat(3, 1fr); }
+    .two-col { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div>
+    <div class="topbar-title">Mamie Boom</div>
+    <div class="topbar-sub">Dashboard KPI</div>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('airtable')" id="tab-airtable">
+    <span class="tab-dot" style="background:#85B7EB;"></span>
+    Acquisition
+  </div>
+  <div class="tab" onclick="switchTab('binomes')" id="tab-binomes">
+    <span class="tab-dot" style="background:#1D9E75;"></span>
+    Binômes
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     ONGLET 1 — ACQUISITION (Airtable)
+══════════════════════════════════════ -->
+<div class="tab-content active" id="content-airtable">
+
+  <div class="page-header">
+    <div class="page-header-left">
+      <h2>Acquisition clients</h2>
+      <div class="sub" id="week-label">Chargement...</div>
+    </div>
+    <div class="nav">
+      <button id="prev-week">&#8249;</button>
+      <button id="today-btn">Cette semaine</button>
+      <button id="next-week">&#8250;</button>
+      <button id="refresh-btn">&#8635; Rafraîchir</button>
+    </div>
+  </div>
+
+  <div id="status" class="status-bar status-info">Connexion à Airtable...</div>
+
+  <div class="kpi-grid-5">
+    <div class="kpi-card">
+      <div class="kpi-label">Demandes</div>
+      <div class="kpi-value" id="kpi-demandes">—</div>
+      <div class="kpi-total" id="kpi-demandes-total">total : —</div>
+      <div class="kpi-sub-row">
+        <div class="kpi-sub-item"><span class="kpi-sub-dot" style="background:#85B7EB;"></span>En ligne <span class="kpi-sub-val" id="kpi-enligne">—</span></div>
+        <div class="kpi-sub-item"><span class="kpi-sub-dot" style="background:#AFA9EC;"></span>Tél <span class="kpi-sub-val" id="kpi-tel">—</span></div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Refusées</div>
+      <div class="kpi-value" id="kpi-refuses">—</div>
+      <div class="kpi-total" id="kpi-refuses-total">total : —</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Mails envoyés</div>
+      <div class="kpi-value" id="kpi-mails">—</div>
+      <div class="kpi-total" id="kpi-mails-total">total : —</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Clients signés</div>
+      <div class="kpi-value" id="kpi-clients">—</div>
+      <div class="kpi-total" id="kpi-clients-total">total : —</div>
+    </div>
+    <div class="kpi-card-amber">
+      <div class="kpi-label-amber">Score moyen</div>
+      <div class="kpi-value-amber" id="kpi-score">—</div>
+      <div class="kpi-total-amber" id="kpi-score-total">total : —</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Évolution sur 6 semaines</div>
+    <div class="card-sub">Demandes, refusées, mails et clients signés</div>
+    <div style="position:relative;width:100%;height:220px;">
+      <canvas id="trend-chart" role="img" aria-label="Évolution hebdomadaire des KPIs"></canvas>
+    </div>
+    <div class="legend">
+      <span><span class="legend-dot" style="background:#B5D4F4;"></span>Demandes</span>
+      <span><span class="legend-dot" style="background:#F0997B;"></span>Refusées</span>
+      <span><span class="legend-dot" style="background:#9FE1CB;"></span>Mails</span>
+      <span><span class="legend-dot" style="background:#AFA9EC;"></span>Signés</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-toggle" id="detail-toggle">
+      <div class="card-title" style="margin:0;">Détail semaine</div>
+      <span class="toggle-icon" id="toggle-icon">&#8964;</span>
+    </div>
+    <div id="records-list" style="display:none; margin-top:12px;">Chargement...</div>
+  </div>
+
+</div>
+
+
+<!-- ══════════════════════════════════════
+     ONGLET 2 — BINÔMES (Google Sheets)
+══════════════════════════════════════ -->
+<div class="tab-content" id="content-binomes">
+
+  <div class="page-header">
+    <div class="page-header-left">
+      <h2>Performance des binômes</h2>
+      <div class="sub" id="b-week-label">Chargement...</div>
+    </div>
+    <div class="nav">
+      <button onclick="loadBinomes()">&#8635; Actualiser</button>
+    </div>
+  </div>
+
+  <div id="b-status" class="status-bar status-info" style="display:none;"></div>
+
+  <div id="b-token-form" style="background:#FAEEDA;border-radius:8px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <span style="font-size:13px;color:#633806;font-weight:500;">🔑 Token Bubble requis</span>
+    <input id="b-token-input" type="password" placeholder="Bearer token Bubble..." style="flex:1;min-width:200px;padding:6px 10px;border:0.5px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit;">
+    <button onclick="saveBubbleToken()" style="background:#1D9E75;color:white;border:none;border-radius:6px;padding:6px 14px;font-size:13px;cursor:pointer;">Connecter</button>
+  </div>
+
+  <div class="kpi-grid-6">
+    <div class="kpi-card"><div class="kpi-label">Clients actifs</div><div class="kpi-value" id="b-clients">—</div><div class="kpi-total">adhésions actives</div><div class="kpi-tag tag-gray">à ce jour</div></div>
+    <div class="kpi-card"><div class="kpi-label">Adhésions</div><div class="kpi-value" id="b-adhesions">—</div><div class="kpi-total">cette semaine</div><div class="kpi-tag tag-blue" id="b-adhesions-tag">— en mai</div></div>
+    <div class="kpi-card"><div class="kpi-label">Binômes actifs</div><div class="kpi-value" id="b-binomes">—</div><div class="kpi-total">à ce jour</div><div class="kpi-tag tag-gray" id="b-binomes-tag">—h théo./sem</div></div>
+    <div class="kpi-card"><div class="kpi-label">Visites</div><div class="kpi-value" id="b-visites">—</div><div class="kpi-total" id="b-visites-sub">—h réalisées</div><div class="kpi-tag tag-amber" id="b-visites-tag">durée moy. —</div></div>
+    <div class="kpi-card"><div class="kpi-label">Heures réal. / théo.</div><div class="kpi-value" id="b-pct">—</div><div class="kpi-total" id="b-pct-sub">— / —</div><div class="kpi-tag" id="b-pct-tag">—</div></div>
+    <div class="kpi-card"><div class="kpi-label">Projection mai</div><div class="kpi-value" id="b-proj">—</div><div class="kpi-total">objectif 1 650h</div><div class="kpi-tag" id="b-proj-tag">—</div></div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">Heures par jour</div>
+      <div class="card-sub">Semaine en cours</div>
+      <div class="legend">
+        <span><span class="legend-dot" style="background:#1D9E75;"></span>Heures S</span>
+      </div>
+      <div style="position:relative;width:100%;height:200px;">
+        <canvas id="b-chart-jour" role="img" aria-label="Heures par jour cette semaine">Chargement...</canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Top binômes cette semaine</div>
+      <div class="card-sub">Total heures effectuées</div>
+      <table class="bar-list" id="b-top">
+        <tr><td style="color:#aaa;padding:2rem 0;font-size:12px;">Chargement...</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    <span>Données Bubble API · En temps réel</span>
+    <span id="b-update-time"></span>
+  </div>
+
+</div>
+
+
+<script>
+/* ═══════════════════════════
+   TABS
+═══════════════════════════ */
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
+  document.getElementById('tab-' + name).classList.add('active');
+  document.getElementById('content-' + name).classList.add('active');
+  if (name === 'binomes' && !bLoaded) loadBinomes();
+}
+
+
+/* ═══════════════════════════
+   AIRTABLE
+═══════════════════════════ */
+const TOKEN = localStorage.getItem('mb_at_token') || '';
+if (!TOKEN) {
+  const t = prompt('Entrez votre token Airtable :');
+  if (t) { localStorage.setItem('mb_at_token', t.trim()); location.reload(); }
+}
+const BASE_ID = 'appNCjCXe2kmAWicp';
+const TABLE_ID = 'tbllikWDe1JcBn43W';
+
+let currentOffset = 0;
+let trendChart = null;
+let allRecords = [];
+let detailOpen = false;
+
+document.getElementById('detail-toggle').addEventListener('click', function() {
+  detailOpen = !detailOpen;
+  document.getElementById('records-list').style.display = detailOpen ? 'block' : 'none';
+  const icon = document.getElementById('toggle-icon');
+  if (detailOpen) { icon.classList.add('open'); } else { icon.classList.remove('open'); }
+});
+
+function getWeekBounds(offset) {
+  const now = new Date();
+  const day = now.getDay();
+  const diffToMon = (day === 0 ? -6 : 1 - day);
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + diffToMon + offset * 7);
+  monday.setHours(0,0,0,0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23,59,59,999);
+  return { monday: monday, sunday: sunday };
+}
+
+function formatDateFR(d) {
+  return d.toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+
+function showStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.style.display = 'block';
+  el.textContent = msg;
+  el.className = 'status-bar status-' + type;
+}
+
+function valContains(val, substr) {
+  if (!val) return false;
+  const s = substr.toLowerCase();
+  if (Array.isArray(val)) return val.some(function(v) { return typeof v === 'string' && v.toLowerCase().includes(s); });
+  return typeof val === 'string' && val.toLowerCase().includes(s);
+}
+
+function findField(fields, name) {
+  if (fields[name] !== undefined) return fields[name];
+  const lower = name.toLowerCase();
+  const keys = Object.keys(fields);
+  for (let i = 0; i < keys.length; i++) {
+    if (keys[i].toLowerCase().includes(lower)) return fields[keys[i]];
+  }
+  return null;
+}
+
+function getCanal(r) {
+  const canal = findField(r.fields, 'Canal');
+  if (!canal) return null;
+  const v = Array.isArray(canal) ? canal[0] : canal;
+  if (!v) return null;
+  const vl = v.toLowerCase();
+  if (vl.includes('ligne') || vl.includes('web') || vl.includes('online')) return 'ligne';
+  if (vl.includes('tel') || vl.includes('phone') || vl.includes('appel')) return 'tel';
+  return 'autre';
+}
+
+function hasMail(r) {
+  return valContains(findField(r.fields, 'Etape du suivi'), 'Mail presentation') ||
+         valContains(findField(r.fields, 'Etape du suivi'), 'Envoi mail sans appel') ||
+         !!findField(r.fields, 'Mail bienvenue');
+}
+
+function filterByWeek(records, monday, sunday) {
+  return records.filter(function(r) {
+    const dateStr = findField(r.fields, 'Date inscription');
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    return d >= monday && d <= sunday;
+  });
+}
+
+function scoreColor(s) {
+  if (s === '—' || s === null || s === undefined) return '#999';
+  const n = parseFloat(s);
+  if (n < 50) return '#E24B4A';
+  if (n < 60) return '#BA7517';
+  if (n < 70) return '#8a7200';
+  if (n < 85) return '#3B6D11';
+  return '#085041';
+}
+
+function scoreMoyen(records) {
+  const scored = records.filter(function(r) {
+    const s = findField(r.fields, 'Score');
+    return s !== null && s !== undefined && s !== '' && !isNaN(parseFloat(s));
+  });
+  if (!scored.length) return '—';
+  const sum = scored.reduce(function(acc, r) { return acc + parseFloat(findField(r.fields, 'Score')); }, 0);
+  return Math.round(sum / scored.length);
+}
+
+function computeKPIs(records) {
+  return {
+    demandes: records.length,
+    refuses: records.filter(function(r) { return valContains(findField(r.fields, 'Intérêt (from Suivi Client)'), 'Refusé par MB') || valContains(findField(r.fields, 'Interet'), 'Refusé par MB'); }).length,
+    mails: records.filter(function(r) { return hasMail(r); }).length,
+    clients: records.filter(function(r) { return valContains(findField(r.fields, 'Etat'), 'Client'); }).length,
+    enligne: records.filter(function(r) { return getCanal(r) === 'ligne'; }).length,
+    tel: records.filter(function(r) { return getCanal(r) === 'tel'; }).length,
+    score: scoreMoyen(records)
+  };
+}
+
+function renderRecords(weekRecords) {
+  const el = document.getElementById('records-list');
+  if (!weekRecords.length) {
+    el.innerHTML = '<p style="color:#999;padding:8px 0;">Aucune demande cette semaine.</p>';
+    return;
+  }
+  el.innerHTML = weekRecords.map(function(r) {
+    const f = r.fields;
+    const label = findField(f, 'Label client') || '—';
+    const dateStr = findField(f, 'Date inscription');
+    const date = dateStr ? new Date(dateStr).toLocaleDateString('fr-FR') : '—';
+    const etape = findField(f, 'Etape du suivi');
+    const etapeStr = Array.isArray(etape) ? etape.join(', ') : (etape || '—');
+    const score = findField(f, 'Score');
+    const scoreStr = (score !== null && score !== undefined && score !== '') ? score : '—';
+    const isRefuse = valContains(findField(f, 'Intérêt (from Suivi Client)'), 'Refusé par MB') || valContains(findField(f, 'Interet'), 'Refusé par MB');
+    const isClient = valContains(findField(f, 'Etat'), 'Client');
+    const canal = getCanal(r);
+    const canalBadge = canal === 'ligne' ? '<span class="badge badge-canal-ligne">En ligne</span>' : canal === 'tel' ? '<span class="badge badge-canal-tel">Tel</span>' : '';
+    const statusBadge = isRefuse ? '<span class="badge badge-refuse">Refusé</span>' : isClient ? '<span class="badge badge-client">Client</span>' : '';
+    return '<div class="record-row">'
+      + '<span class="record-name">' + label + canalBadge + statusBadge + '</span>'
+      + '<span class="record-etape">' + etapeStr + '</span>'
+      + '<span style="color:' + scoreColor(scoreStr) + ';font-size:12px;white-space:nowrap;margin-right:8px;">&#9733; ' + scoreStr + '</span>'
+      + '<span class="record-date">' + date + '</span>'
+      + '</div>';
+  }).join('');
+}
+
+function renderTrend(weeklyData) {
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(document.getElementById('trend-chart'), {
+    type: 'bar',
+    data: {
+      labels: weeklyData.map(function(w) { return w.label; }),
+      datasets: [
+        { label: 'Demandes', data: weeklyData.map(function(w) { return w.kpi.demandes; }), backgroundColor: '#B5D4F4', borderRadius: 4 },
+        { label: 'Refusées', data: weeklyData.map(function(w) { return w.kpi.refuses; }), backgroundColor: '#F0997B', borderRadius: 4 },
+        { label: 'Mails', data: weeklyData.map(function(w) { return w.kpi.mails; }), backgroundColor: '#9FE1CB', borderRadius: 4 },
+        { label: 'Signés', data: weeklyData.map(function(w) { return w.kpi.clients; }), backgroundColor: '#AFA9EC', borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 }, autoSkip: false, maxRotation: 0 } },
+        y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.05)' } }
+      }
+    }
+  });
+}
+
+function update() {
+  const bounds = getWeekBounds(currentOffset);
+  document.getElementById('week-label').textContent = formatDateFR(bounds.monday) + ' — ' + formatDateFR(bounds.sunday);
+  const weekRecords = filterByWeek(allRecords, bounds.monday, bounds.sunday);
+  const kpi = computeKPIs(weekRecords);
+  const total = computeKPIs(allRecords);
+  document.getElementById('kpi-demandes').textContent = kpi.demandes;
+  document.getElementById('kpi-refuses').textContent = kpi.refuses;
+  document.getElementById('kpi-mails').textContent = kpi.mails;
+  document.getElementById('kpi-clients').textContent = kpi.clients;
+  document.getElementById('kpi-enligne').textContent = kpi.enligne;
+  document.getElementById('kpi-tel').textContent = kpi.tel;
+  var scoreEl = document.getElementById('kpi-score');
+  scoreEl.textContent = kpi.score;
+  scoreEl.style.color = scoreColor(kpi.score);
+  document.getElementById('kpi-demandes-total').textContent = 'total : ' + total.demandes;
+  document.getElementById('kpi-refuses-total').textContent = 'total : ' + total.refuses;
+  document.getElementById('kpi-mails-total').textContent = 'total : ' + total.mails;
+  document.getElementById('kpi-clients-total').textContent = 'total : ' + total.clients;
+  document.getElementById('kpi-score-total').textContent = 'total : ' + total.score;
+  renderRecords(weekRecords);
+  const weeklyData = [];
+  for (var i = -5; i <= 0; i++) {
+    const b = getWeekBounds(currentOffset + i);
+    weeklyData.push({ label: b.monday.toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit' }), kpi: computeKPIs(filterByWeek(allRecords, b.monday, b.sunday)) });
+  }
+  renderTrend(weeklyData);
+}
+
+async function fetchPage(offsetParam) {
+  const filter = encodeURIComponent("IS_AFTER({Date inscription}, '2025-12-31')");
+  let url = 'https://api.airtable.com/v0/' + BASE_ID + '/' + TABLE_ID + '?pageSize=100&filterByFormula=' + filter;
+  if (offsetParam) url += '&offset=' + encodeURIComponent(offsetParam);
+  const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + TOKEN } });
+  if (!res.ok) { const err = await res.json().catch(function() { return {}; }); throw new Error('Airtable erreur ' + res.status + ': ' + (err.error ? err.error.message : '')); }
+  return res.json();
+}
+
+async function load() {
+  showStatus('Connexion à Airtable...', 'info');
+  try {
+    let records = [], offsetParam = null, page = 0;
+    do {
+      page++;
+      showStatus('Chargement page ' + page + '...', 'info');
+      const data = await fetchPage(offsetParam);
+      records = records.concat(data.records || []);
+      offsetParam = data.offset || null;
+    } while (offsetParam);
+    allRecords = records;
+    showStatus('✓ ' + records.length + ' enregistrements chargés', 'ok');
+    setTimeout(function() { document.getElementById('status').style.display = 'none'; }, 3000);
+    update();
+  } catch(e) {
+    showStatus('Erreur : ' + e.message, 'error');
+  }
+}
+
+document.getElementById('prev-week').addEventListener('click', function() { currentOffset--; update(); });
+document.getElementById('next-week').addEventListener('click', function() { currentOffset++; update(); });
+document.getElementById('today-btn').addEventListener('click', function() { currentOffset = 0; update(); });
+document.getElementById('refresh-btn').addEventListener('click', load);
+load();
+
+
+/* ═══════════════════════════
+   BINÔMES (Bubble API directe)
+═══════════════════════════ */
+const BUBBLE_BASE = 'https://app.mamie-boom.com/api/1.1/obj/';
+let BUBBLE_TOKEN = localStorage.getItem('mb_bubble_token') || '';
+let bChartJour = null;
+let bLoaded = false;
+
+function saveBubbleToken() {
+  const val = document.getElementById('b-token-input').value.trim();
+  if (val) {
+    BUBBLE_TOKEN = val;
+    localStorage.setItem('mb_bubble_token', val);
+    document.getElementById('b-token-form').style.display = 'none';
+    loadBinomes();
+  }
+}
+
+function initTokenForm() {
+  if (BUBBLE_TOKEN) {
+    const form = document.getElementById('b-token-form');
+    if (form) form.style.display = 'none';
+  } else {
+    document.getElementById('b-token-input').value = '';
+  }
+}
+
+async function fetchBubbleAll(type, filters) {
+  if (!BUBBLE_TOKEN) return [];
+  let results = [], cursor = 0, remaining = 1;
+  while (remaining > 0) {
+    try {
+      let url = BUBBLE_BASE + type + '?limit=100&cursor=' + cursor;
+      if (filters) url += '&filters=' + encodeURIComponent(JSON.stringify(filters));
+      const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + BUBBLE_TOKEN } });
+      if (!res.ok) break;
+      const json = await res.json();
+      const r = json.response || {};
+      results = results.concat(r.results || []);
+      remaining = r.remaining || 0;
+      cursor += 100;
+    } catch(e) { break; }
+  }
+  return results;
+}
+
+function parseMin(val) { if (!val) return 0; const n = parseFloat(val); return isNaN(n) ? 0 : n; }
+
+async function loadBinomes() {
+  bLoaded = true;
+  initTokenForm();
+  if (!BUBBLE_TOKEN) return;
+  const bStatus = document.getElementById('b-status');
+  bStatus.style.display = 'block';
+  bStatus.textContent = 'Connexion à Bubble...';
+  bStatus.className = 'status-bar status-info';
+
+  // Semaine en cours
+  const now = new Date();
+  const day = now.getDay();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+  monday.setHours(0,0,0,0);
+  const mondayISO = monday.toISOString().split('T')[0];
+
+  // Appels API Bubble en parallèle
+  // Premier jour du mois en cours
+  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+
+  const [suivi, binomes, ga] = await Promise.all([
+    fetchBubbleAll('BA_Suivi', [{"key":"DateDebutVisite_Suivi","constraint_type":"greater than","value": mondayISO}]),
+    fetchBubbleAll('Binome_moisSuivi', [
+      {"key":"ValidationMB","constraint_type":"equals","value":"true"},
+      {"key":"DATE_DATE","constraint_type":"greater than","value": firstOfMonth}
+    ]),
+    fetchBubbleAll('BA_GentilAccompagnateur')
+  ]);
+
+  bStatus.style.display = 'none';
+
+  const visitesS = suivi; // deja filtres par API Bubble sur la semaine en cours
+
+  const totalMin = visitesS.reduce(function(s, r) { return s + parseMin(r['Duree_Suivi']); }, 0);
+  const hReal = Math.round(totalMin / 60 * 10) / 10;
+  const hTheo = binomes.length * 3;
+  const pct = hTheo > 0 ? Math.round(hReal / hTheo * 100) : 0;
+
+  const hMai = visitesS.reduce(function(s, r) {
+    return s + parseMin(r['Duree_Suivi']);
+  }, 0) / 60;
+
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const semRestantes = Math.max(0, Math.ceil((lastDay - now) / (7 * 24 * 3600 * 1000)));
+  const proj = Math.round(hMai + semRestantes * hReal);
+
+  const adhS = ga.filter(function(r) { 
+    const dateStr = r['Created Date'] || r['x_AirtableDateCreation_GentilAccompagnateur'];
+    if (!dateStr) return false; 
+    const d = new Date(dateStr); 
+    return d >= monday && d <= now; 
+  }).length;
+  const adhMai = ga.filter(function(r) { 
+    const dateStr = r['Created Date'] || r['x_AirtableDateCreation_GentilAccompagnateur'];
+    if (!dateStr) return false; 
+    const d = new Date(dateStr); 
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); 
+  }).length;
+
+  document.getElementById('b-clients').textContent = ga.length;
+  document.getElementById('b-adhesions').textContent = adhS;
+  document.getElementById('b-adhesions-tag').textContent = adhMai + ' en mai';
+  document.getElementById('b-binomes').textContent = binomes.length;
+  document.getElementById('b-binomes-tag').textContent = hTheo + 'h théo./sem';
+  document.getElementById('b-visites').textContent = visitesS.length;
+  document.getElementById('b-visites-sub').textContent = hReal + 'h réalisées';
+  document.getElementById('b-visites-tag').textContent = 'durée moy. ' + (visitesS.length > 0 ? Math.round(totalMin / visitesS.length) : 0) + 'min';
+  document.getElementById('b-pct').textContent = pct + '%';
+  document.getElementById('b-pct-sub').textContent = hReal + 'h / ' + hTheo + 'h';
+  const pctTag = document.getElementById('b-pct-tag');
+  pctTag.textContent = hReal + 'h réalisées';
+  pctTag.className = 'kpi-tag ' + (pct >= 50 ? 'tag-green' : pct >= 25 ? 'tag-amber' : 'tag-red');
+  document.getElementById('b-proj').textContent = proj + 'h';
+  const projTag = document.getElementById('b-proj-tag');
+  projTag.textContent = proj >= 1650 ? '✓ objectif atteint' : '−' + (1650 - proj) + 'h';
+  projTag.className = 'kpi-tag ' + (proj >= 1650 ? 'tag-green' : 'tag-red');
+
+  const days = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+  const dayH = [0,0,0,0,0,0,0];
+  visitesS.forEach(function(r) {
+    if (!r['DateDebutVisite_Suivi']) return;
+    const idx = (new Date(r['DateDebutVisite_Suivi']).getDay() + 6) % 7;
+    dayH[idx] += parseMin(r['Duree_Suivi']) / 60;
+  });
+
+  if (bChartJour) bChartJour.destroy();
+  bChartJour = new Chart(document.getElementById('b-chart-jour'), {
+    type: 'bar',
+    data: { labels: days, datasets: [{ label: 'Heures', data: dayH.map(function(h) { return Math.round(h*10)/10; }), backgroundColor: '#1D9E75', borderRadius: 4 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c) { return ' ' + c.raw + 'h'; } } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 }, autoSkip: false } },
+        y: { beginAtZero: true, ticks: { font: { size: 11 }, callback: function(v) { return v + 'h'; } }, grid: { color: 'rgba(0,0,0,0.05)' } }
+      }
+    }
+  });
+
+  const topMap = {};
+  visitesS.forEach(function(r) { const k = r['x_AirtableSB_Suivi'] || 'Inconnu'; topMap[k] = (topMap[k] || 0) + parseMin(r['Duree_Suivi']); });
+  const tops = Object.entries(topMap).sort(function(a,b) { return b[1]-a[1]; }).slice(0,8);
+  const maxM = tops[0] ? tops[0][1] : 1;
+  const tbl = document.getElementById('b-top');
+  tbl.innerHTML = tops.length === 0
+    ? '<tr><td style="color:#aaa;padding:1rem 0;font-size:12px;">Aucune visite cette semaine</td></tr>'
+    : tops.map(function(e, i) {
+        const h = Math.floor(e[1]/60), m = Math.round(e[1]%60);
+        const label = m === 0 ? h+'h' : h+'h'+String(m).padStart(2,'0');
+        const alpha = (0.4 + 0.6*(1-i/tops.length)).toFixed(2);
+        return '<tr><td class="bname" title="'+e[0]+'">'+e[0]+'</td><td class="bwrap"><div class="bbar" style="width:'+Math.round(e[1]/maxM*100)+'%;background:rgba(186,117,23,'+alpha+');"></div></td><td class="bval">'+label+'</td></tr>';
+      }).join('');
+
+  document.getElementById('b-week-label').textContent = 'Semaine du ' + monday.toLocaleDateString('fr-FR', { day:'numeric', month:'long' });
+  document.getElementById('b-update-time').textContent = 'Mis à jour à ' + now.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+}
+</script>
+</body>
+</html>
