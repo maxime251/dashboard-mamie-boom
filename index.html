@@ -221,6 +221,12 @@
 
   <div id="b-status" class="status-bar status-info" style="display:none;"></div>
 
+  <div id="b-token-form" style="background:#FAEEDA;border-radius:8px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <span style="font-size:13px;color:#633806;font-weight:500;">🔑 Token Bubble requis</span>
+    <input id="b-token-input" type="password" placeholder="Bearer token Bubble..." style="flex:1;min-width:200px;padding:6px 10px;border:0.5px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit;">
+    <button onclick="saveBubbleToken()" style="background:#1D9E75;color:white;border:none;border-radius:6px;padding:6px 14px;font-size:13px;cursor:pointer;">Connecter</button>
+  </div>
+
   <div class="kpi-grid-6">
     <div class="kpi-card"><div class="kpi-label">Clients actifs</div><div class="kpi-value" id="b-clients">—</div><div class="kpi-total">adhésions actives</div><div class="kpi-tag tag-gray">à ce jour</div></div>
     <div class="kpi-card"><div class="kpi-label">Adhésions</div><div class="kpi-value" id="b-adhesions">—</div><div class="kpi-total">cette semaine</div><div class="kpi-tag tag-blue" id="b-adhesions-tag">— en mai</div></div>
@@ -519,12 +525,27 @@ let BUBBLE_TOKEN = localStorage.getItem('mb_bubble_token') || '';
 let bChartJour = null;
 let bLoaded = false;
 
-async function fetchBubbleAll(type, filters) {
-  if (!BUBBLE_TOKEN) {
-    const t = prompt('Entrez votre token Bubble API :');
-    if (t) { BUBBLE_TOKEN = t.trim(); localStorage.setItem('mb_bubble_token', BUBBLE_TOKEN); }
-    else return [];
+function saveBubbleToken() {
+  const val = document.getElementById('b-token-input').value.trim();
+  if (val) {
+    BUBBLE_TOKEN = val;
+    localStorage.setItem('mb_bubble_token', val);
+    document.getElementById('b-token-form').style.display = 'none';
+    loadBinomes();
   }
+}
+
+function initTokenForm() {
+  if (BUBBLE_TOKEN) {
+    const form = document.getElementById('b-token-form');
+    if (form) form.style.display = 'none';
+  } else {
+    document.getElementById('b-token-input').value = '';
+  }
+}
+
+async function fetchBubbleAll(type, filters) {
+  if (!BUBBLE_TOKEN) return [];
   let results = [], cursor = 0, remaining = 1;
   while (remaining > 0) {
     try {
@@ -546,6 +567,8 @@ function parseMin(val) { if (!val) return 0; const n = parseFloat(val); return i
 
 async function loadBinomes() {
   bLoaded = true;
+  initTokenForm();
+  if (!BUBBLE_TOKEN) return;
   const bStatus = document.getElementById('b-status');
   bStatus.style.display = 'block';
   bStatus.textContent = 'Connexion à Bubble...';
