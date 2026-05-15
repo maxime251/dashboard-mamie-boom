@@ -251,7 +251,7 @@
   </div>
 
   <div class="footer-note">
-    <span>Données Google Sheets · Alimenté par Make + Bubble API</span>
+    <span>Données Bubble API · En temps réel</span>
     <span id="b-update-time"></span>
   </div>
 
@@ -512,25 +512,34 @@ load();
 
 
 /* ═══════════════════════════
-   BINÔMES (Google Sheets)
+   BINÔMES (Bubble API directe)
 ═══════════════════════════ */
-const SHEET_ID = '1bVOf9Y19mixa-AF48gsECWeb9vMa-P8JZ6_MNG8En14';
-const GAPI = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=out:json&sheet=';
+const BUBBLE_BASE = 'https://app.mamie-boom.com/api/1.1/obj/';
+let BUBBLE_TOKEN = localStorage.getItem('mb_bubble_token') || '';
 let bChartJour = null;
 let bLoaded = false;
 
-async function fetchGSheet(name) {
-  try {
-    const res = await fetch(GAPI + encodeURIComponent(name));
-    const text = await res.text();
-    const json = JSON.parse(text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\)/)[1]);
-    const cols = json.table.cols.map(function(c) { return c.label; });
-    return json.table.rows.map(function(r) {
-      const obj = {};
-      r.c.forEach(function(cell, i) { obj[cols[i]] = cell ? cell.v : null; });
-      return obj;
-    });
-  } catch(e) { return []; }
+async function fetchBubbleAll(type, filters) {
+  if (!BUBBLE_TOKEN) {
+    const t = prompt('Entrez votre token Bubble API :');
+    if (t) { BUBBLE_TOKEN = t.trim(); localStorage.setItem('mb_bubble_token', BUBBLE_TOKEN); }
+    else return [];
+  }
+  let results = [], cursor = 0, remaining = 1;
+  while (remaining > 0) {
+    try {
+      let url = BUBBLE_BASE + type + '?limit=100&cursor=' + cursor;
+      if (filters) url += '&filters=' + encodeURIComponent(JSON.stringify(filters));
+      const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + BUBBLE_TOKEN } });
+      if (!res.ok) break;
+      const json = await res.json();
+      const r = json.response || {};
+      results = results.concat(r.results || []);
+      remaining = r.remaining || 0;
+      cursor += 100;
+    } catch(e) { break; }
+  }
+  return results;
 }
 
 function parseMin(val) { if (!val) return 0; const n = parseFloat(val); return isNaN(n) ? 0 : n; }
@@ -539,43 +548,53 @@ async function loadBinomes() {
   bLoaded = true;
   const bStatus = document.getElementById('b-status');
   bStatus.style.display = 'block';
-  bStatus.textContent = 'Connexion à Google Sheets...';
+  bStatus.textContent = 'Connexion à Bubble...';
   bStatus.className = 'status-bar status-info';
 
-  const suivi = await fetchGSheet('BA_Suivi');
-  const binomes = await fetchGSheet('Binome_moisSuivi');
-  const ga = await fetchGSheet('BA_GentilAccompagnateur');
-
-  bStatus.style.display = 'none';
-
+  // Semaine en cours
   const now = new Date();
   const day = now.getDay();
   const monday = new Date(now);
   monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
   monday.setHours(0,0,0,0);
+  const mondayISO = monday.toISOString().split('T')[0];
 
-  const visitesS = suivi.filter(function(r) {
-    return !!r['DateDebutVisite_Suivi'];
-  });
+  // Appels API Bubble en parallèle
+  const [suivi, binomes, ga] = await Promise.all([
+    fetchBubbleAll('BA_Suivi', [{"key":"DateDebutVisite_Suivi","constraint_type":"greater than","value": mondayISO}]),
+    fetchBubbleAll('Binome_moisSuivi', [{"key":"ValidationMB","constraint_type":"equals","value":"true"}]),
+    fetchBubbleAll('BA_GentilAccompagnateur')
+  ]);
 
-  const totalMin = visitesS.reduce(function(s, r) { return s + parseMin(r['DureeVisite_Suivi']); }, 0);
+  bStatus.style.display = 'none';
+
+  const visitesS = suivi; // deja filtres par API Bubble sur la semaine en cours
+
+  const totalMin = visitesS.reduce(function(s, r) { return s + parseMin(r['Duree_Suivi'] || r['DureeVisite_Suivi']); }, 0);
   const hReal = Math.round(totalMin / 60 * 10) / 10;
   const hTheo = binomes.length * 3;
   const pct = hTheo > 0 ? Math.round(hReal / hTheo * 100) : 0;
 
-  const hMai = suivi.reduce(function(s, r) {
-    if (!r['DateDebutVisite_Suivi']) return s;
-    const d = new Date(r['DateDebutVisite_Suivi']);
-    if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) return s + parseMin(r['DureeVisite_Suivi']);
-    return s;
+  const hMai = visitesS.reduce(function(s, r) {
+    return s + parseMin(r['Duree_Suivi'] || r['DureeVisite_Suivi']);
   }, 0) / 60;
 
   const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   const semRestantes = Math.max(0, Math.ceil((lastDay - now) / (7 * 24 * 3600 * 1000)));
   const proj = Math.round(hMai + semRestantes * hReal);
 
-  const adhS = ga.filter(function(r) { if (!r['Created Date']) return false; const d = new Date(r['Created Date']); return d >= monday && d <= now; }).length;
-  const adhMai = ga.filter(function(r) { if (!r['Created Date']) return false; const d = new Date(r['Created Date']); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); }).length;
+  const adhS = ga.filter(function(r) { 
+    const dateStr = r['Created Date'] || r['x_AirtableDateCreation_GentilAccompagnateur'];
+    if (!dateStr) return false; 
+    const d = new Date(dateStr); 
+    return d >= monday && d <= now; 
+  }).length;
+  const adhMai = ga.filter(function(r) { 
+    const dateStr = r['Created Date'] || r['x_AirtableDateCreation_GentilAccompagnateur'];
+    if (!dateStr) return false; 
+    const d = new Date(dateStr); 
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); 
+  }).length;
 
   document.getElementById('b-clients').textContent = ga.length;
   document.getElementById('b-adhesions').textContent = adhS;
@@ -600,7 +619,7 @@ async function loadBinomes() {
   visitesS.forEach(function(r) {
     if (!r['DateDebutVisite_Suivi']) return;
     const idx = (new Date(r['DateDebutVisite_Suivi']).getDay() + 6) % 7;
-    dayH[idx] += parseMin(r['DureeVisite_Suivi']) / 60;
+    dayH[idx] += parseMin(r['Duree_Suivi'] || r['DureeVisite_Suivi']) / 60;
   });
 
   if (bChartJour) bChartJour.destroy();
@@ -618,7 +637,7 @@ async function loadBinomes() {
   });
 
   const topMap = {};
-  visitesS.forEach(function(r) { const k = r['x_AirtableSB_Suivi'] || 'Inconnu'; topMap[k] = (topMap[k] || 0) + parseMin(r['DureeVisite_Suivi']); });
+  visitesS.forEach(function(r) { const k = r['x_AirtableSB_Suivi'] || r['x_AirtableSB'] || 'Inconnu'; topMap[k] = (topMap[k] || 0) + parseMin(r['Duree_Suivi'] || r['DureeVisite_Suivi']); });
   const tops = Object.entries(topMap).sort(function(a,b) { return b[1]-a[1]; }).slice(0,8);
   const maxM = tops[0] ? tops[0][1] : 1;
   const tbl = document.getElementById('b-top');
